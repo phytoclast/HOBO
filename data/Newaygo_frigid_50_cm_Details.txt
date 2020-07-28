@@ -1,0 +1,88 @@
+﻿Details
+Series: Temp, °C (soil temp)
+	Devices
+		Device Info
+			• Product: HOBO UA-001-08 Pendant Temp
+			• Serial Number: 20196969
+			• Version Number: 0.00
+			• Manufacturer: Onset Computer Corp.
+			• Device Memory: 8192
+			• Header Created: 09/24/13 08:53:21 AM GMT-04:00
+	Deployment Info
+		• Full Series Name: Temperature, °C
+		• Sensor Label: soil temp
+		• Launch Name: Newaygo frigid 50 cm
+		• Deployment Number: 3
+		• Launch Time: 06/26/19 07:25:47 AM GMT-04:00
+		• Logging Interval: 12 Hr 00 Min 00 Sec
+		• Launch GMT Offset: -4 Hr 0 Min
+		• Battery at Launch: 2.99 Volts
+		• Launching Program: HOBOware Pro-3.7.8_0408_1457_Windows
+	Series Statistics
+		• Samples: 793
+		• Max: 17.284
+		• Min: 1.656
+		• Avg: 9.161
+		• Std Dev (σ): 5.382
+		• First Sample Time: 06/27/19 03:00:00 AM GMT-04:00
+		• Last Sample Time: 07/27/20 03:00:00 AM GMT-04:00
+Event Type: Coupler Attached
+	Devices
+		Device Info
+			• Product: HOBO UA-001-08 Pendant Temp
+			• Serial Number: 20196969
+			• Version Number: 0.00
+			• Manufacturer: Onset Computer Corp.
+			• Device Memory: 8192
+			• Header Created: 09/24/13 08:53:21 AM GMT-04:00
+	Deployment Info
+		• Full Series Name: Coupler Attached
+		• Launch Name: Newaygo frigid 50 cm
+		• Deployment Number: 3
+		• Launch Time: 06/26/19 07:25:47 AM GMT-04:00
+		• Launch GMT Offset: -4 Hr 0 Min
+		• Battery at Launch: 2.99 Volts
+	Series Statistics
+		• Samples: 1
+		• First Sample Time: 07/27/20 01:49:26 PM GMT-04:00
+		• Last Sample Time: 07/27/20 01:49:26 PM GMT-04:00
+Event Type: Host Connected
+	Devices
+		Device Info
+			• Product: HOBO UA-001-08 Pendant Temp
+			• Serial Number: 20196969
+			• Version Number: 0.00
+			• Manufacturer: Onset Computer Corp.
+			• Device Memory: 8192
+			• Header Created: 09/24/13 08:53:21 AM GMT-04:00
+	Deployment Info
+		• Full Series Name: Host Connected
+		• Launch Name: Newaygo frigid 50 cm
+		• Deployment Number: 3
+		• Launch Time: 06/26/19 07:25:47 AM GMT-04:00
+		• Launch GMT Offset: -4 Hr 0 Min
+		• Battery at Launch: 2.99 Volts
+	Series Statistics
+		• Samples: 1
+		• First Sample Time: 07/27/20 01:49:44 PM GMT-04:00
+		• Last Sample Time: 07/27/20 01:49:44 PM GMT-04:00
+Event Type: End Of File
+	Devices
+		Device Info
+			• Product: HOBO UA-001-08 Pendant Temp
+			• Serial Number: 20196969
+			• Version Number: 0.00
+			• Manufacturer: Onset Computer Corp.
+			• Device Memory: 8192
+			• Header Created: 09/24/13 08:53:21 AM GMT-04:00
+	Deployment Info
+		• Full Series Name: End Of File
+		• Launch Name: Newaygo frigid 50 cm
+		• Deployment Number: 3
+		• Launch Time: 06/26/19 07:25:47 AM GMT-04:00
+		• Launch GMT Offset: -4 Hr 0 Min
+		• Battery at Launch: 2.99 Volts
+	Series Statistics
+		• Samples: 1
+		• First Sample Time: 07/27/20 01:49:44 PM GMT-04:00
+		• Last Sample Time: 07/27/20 01:49:44 PM GMT-04:00
