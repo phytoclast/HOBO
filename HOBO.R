@@ -1,5 +1,6 @@
 ### Packages and functions ----
 library(stringr)
+library(ggplot2)
 
 dyear <- function(year, month, day){
   leap <- ifelse(year/400 == floor(year/400), 1,
@@ -64,7 +65,9 @@ ground$day <- as.numeric(str_split_fixed(ground$DATE, '-', 3)[,3])
 ground$dyear <- dyear(ground$year,ground$month,ground$day)
 ground$t <- (ground$TMAX + ground$TMIN)/2
 
-
+norm <- read.delim('data/norms19812010.txt', encoding = 'UTF-8')
+ground.sts <- unique(ground$STATION)
+norm.ground <- subset(norm, Station_ID %in% ground.sts)
 ## compare two stations ----
 hobo1 <- subset(hobo, station %in% 'Wexford_frigid_50', select = c(date, dyear, hour, hyear, t, station))
 hobo2 <- subset(hobo, station %in% 'Wexford_mesic_50', select = c(date, dyear, hour, hyear, t, station))
@@ -390,18 +393,103 @@ AIC(model)
 ## Relationship to ground stations ----
 
 hobo.d <- aggregate(list(t = hobo$t), by = list(station = hobo$station, year = hobo$year, month = hobo$month,  day = hobo$day, dyear = hobo$dyear), FUN = 'mean')
-hobo1 <- subset(hobo.d, station %in% 'Wexford_frigid_10', select = c(dyear, t, station))
+hobo1 <- subset(hobo.d, station %in% 'Wexford_frigid_10', select = c(dyear, year, month, day, t, station))
+hobo2 <- subset(hobo.d, station %in% 'Wexford_frigid_50', select = c(dyear, year, month, day, t, station))
+hobo2$t.50 <- hobo2$t
+hobo1 <- merge(hobo1, hobo2[,c('dyear','t.50')], by='dyear', all.x = TRUE)
 sts <- unique(ground$STATION)
 i=1
 for (i in 1:length(sts)){
 
 ground1 <- subset(ground, STATION %in% sts[i], select = c(dyear, t, STATION))
 ground1$x <- ground1$t
-hobo1 <- merge(hobo1, ground1[,c('dyear','x')], by='dyear')
+hobo1 <- merge(hobo1, ground1[,c('dyear','x')], by='dyear', all.x = TRUE)
 colnames(hobo1)[names(hobo1) == 'x'] <- as.character(sts[i])
 }
 
 
-hobo1 <- subset(hobo1, !is.na(USC00200779) & !is.na(USC00201178) , select = -c(USC00208772))
-cor(hobo1[,c(2,4:7)])
+hobo1.month <- subset(hobo1, day == 1, select = c(dyear, month))
 
+plot <- 
+  ggplot(hobo1, aes(x=dyear)) +
+  geom_line(aes(y=USC00208774, color ='USC00208774'), alpha=0.3)+
+  geom_line(aes(y=USC00200779, color ='USC00200779'), alpha=0.3)+
+  geom_line(aes(y=USC00208772, color ='USC00208772'), alpha=0.3)+
+  geom_line(aes(y=USW00014817, color ='USW00014817'), alpha=0.3)+
+  geom_line(aes(y=USC00201178, color ='USC00201178'), alpha=0.3)+
+  geom_line(aes(y=t, color ='Briar Hills, 10 cm'), alpha=1)+
+  geom_line(aes(y=t.50, color ='Briar Hills, 50 cm'), alpha=1)+
+  scale_x_continuous(name= "Month", 
+                     breaks=hobo1.month$dyear,
+                     labels=hobo1.month$month,
+                     minor_breaks = NULL)+
+  scale_y_continuous(name= "Temperature C", breaks=seq(-20, 35, 5), minor_breaks = seq(-20, 35, 1))+
+  theme(panel.grid.major = element_line(colour="white", size=1),
+        panel.grid.minor = element_line(colour="white", size=0.1)) +
+  scale_color_manual('Stations',
+                     breaks = c('USC00208774', 'USC00200779', 'USW00014817', 'USW00014817', 'USC00201178', 'Briar Hills, 10 cm', 'Briar Hills, 50 cm'),
+                     values = c('red', 'yellow', 'violet', 'blue', 'green', 'black', 'brown')
+  )+
+  labs(title = "Air and soil temperatures", title.position = "bottom", color='Station')
+## correlation matrix
+hobo2 <- subset(hobo1, month %in% c(7,8,9,10,4,5,6))
+hobo2 <- subset(hobo1)
+nums <- unlist(lapply(hobo2, is.numeric))
+hobo2 <- subset(hobo2, select = nums)
+
+cor(hobo2, use = 'pairwise.complete.obs')
+unique(ground[,c('STATION', 'NAME')])
+### plot all lines ----
+
+plot <- 
+  ggplot() +
+  geom_line(aes(x=hobo.d$dyear, y=hobo.d$t, color = hobo.d$station, linetype = hobo.d$station), alpha=0.7)+
+  geom_line(aes(x=ground$dyear, y=ground$t, color = ground$NAME, linetype = ground$NAME), alpha=0.3)+
+  scale_x_continuous(name= "Month", 
+                     breaks=hobo1.month$dyear,
+                     labels=hobo1.month$month,
+                     minor_breaks = NULL)+
+  scale_y_continuous(name= "Temperature C", breaks=seq(-20, 35, 5), minor_breaks = seq(-20, 35, 1))+
+  theme(panel.grid.major = element_line(colour="white", size=1),
+        panel.grid.minor = element_line(colour="white", size=0.1)) +
+  scale_color_manual('Stations', breaks = c("Wexford_frigid_10", "Wexford_frigid_50", "Wexford_mesic_50", "Newaygo_frigid_50",  "Newaygo_mesic_50",
+                                            'BIG RAPIDS WATER TREATMENT PLANT, MI US' ,'WELLSTON TIPPY DAM, MI US', 'WELLSTON 1 N, MI US',
+                                            'CADILLAC, MI US', 'CADILLAC 9 AND 10 NEWS, MI US'),
+                     values = c('black', 'blue', 'cyan', 'red', 'orange', 'red','gray','gray','blue','gray' )
+  )+
+  scale_linetype_manual('Stations', breaks = c("Wexford_frigid_10", "Wexford_frigid_50", "Wexford_mesic_50", "Newaygo_frigid_50",  "Newaygo_mesic_50",
+                                            'BIG RAPIDS WATER TREATMENT PLANT, MI US' ,'WELLSTON TIPPY DAM, MI US', 'WELLSTON 1 N, MI US',
+                                            'CADILLAC, MI US', 'CADILLAC 9 AND 10 NEWS, MI US'),
+                     values = c('solid', 'solid', 'solid', 'solid', 'solid', 'dashed','dashed','dashed','dashed','dashed' )
+  )+
+  labs(title = "Air and soil temperatures", title.position = "bottom", color='Station')
+
+### Ground station summaries ----
+ground.premean <- subset(ground, !is.na(t))
+ground.mean <- aggregate(list(t = ground.premean$t),  by = list(station = ground.premean$STATION, name = ground.premean$NAME, month = ground.premean$month), FUN = 'mean')
+ground.mean2 <- aggregate(list(t = ground.mean$t), by = list(station = ground.mean$station, name = ground.mean$name), FUN = 'mean', na.action = na.omit)
+
+ground.summer <- subset(ground.mean, month %in% c(6,7,8))
+ground.summer.mean <- aggregate(list(t.summer = ground.summer$t),by = list(station = ground.summer$station), FUN = 'mean')
+
+ground.winter <- subset(ground.mean, month %in% c(1,2,12))
+ground.winter.mean <- aggregate(list(t.winter = ground.winter$t),by = list(station = ground.winter$station), FUN = 'mean')
+
+ground.merge <- merge(ground.mean2, ground.summer.mean, by='station')
+ground.merge <- merge(ground.merge, ground.winter.mean, by='station')
+ground.merge$range <- ground.merge$t.summer - ground.merge$t.winter
+
+## Ground Station norms ----
+t.months <- c('t01', 't02', 't03', 't04', 't05', 't06', 't07', 't08', 't09', 't10', 't11', 't12')
+norm.t <- as.data.frame(list(Station_ID = 'Station_ID',Station_Name='Station_Name',State='State',Latitude=NA,Longitude=NA,Elevation=NA,t.norm=NA, month=NA))
+for (i in 1:12){
+  norm.trans <- subset(norm.ground, select = c('Station_ID','Station_Name','State','Latitude','Longitude','Elevation',t.months[i]))
+  norm.trans$month <- i
+  colnames(norm.trans)[names(norm.trans) == t.months[i]] <- 't.norm'
+  norm.t <- rbind(norm.t, norm.trans)
+}
+norm.t <- norm.t[-1,]
+norm.t.ground <- merge(norm.t, ground.mean[,c('station', 'month','t')], by.x=c('Station_ID', 'month'),by.y=c('station', 'month')) 
+norm.t.ground$deviation <- norm.t.ground$t - norm.t.ground$t.norm
+
+norm.t.ground.annual <- aggregate(list(t = norm.t.ground$deviation), by=list(Station_ID=norm.t.ground$Station_ID, Station_Name=norm.t.ground$Station_Name), FUN='mean')
