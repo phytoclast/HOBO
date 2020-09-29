@@ -48,6 +48,11 @@ hobo1 <- read.csv('data/Newaygo_frigid_50_cm.csv')
 colnames(hobo1) <- c('id', 'date', 'time', 't')
 hobo1$station <- 'Newaygo_frigid_50'
 hobo <- rbind(hobo, hobo1)
+
+hobo1 <- read.csv('data/Newaygo_frigid_10_cm.csv')
+colnames(hobo1) <- c('id', 'date', 'time', 't')
+hobo1$station <- 'Newaygo_frigid_10'
+hobo <- rbind(hobo, hobo1)
 rm(hobo1)
 
 hobo$year <- as.numeric(str_split_fixed(hobo$date, '/', 3)[,1]) +2000
@@ -84,8 +89,9 @@ boxplot(hobo1$t ~ hobo1$hour)
 
 ## get means by station
 hobo1.mean <- aggregate(hobo1[,c('t','t2')], by = list(hour = hobo1$hour), FUN = 'mean')
-
-hobo.mean <- aggregate(list(t = hobo$t), by = list(station = hobo$station, month = hobo$month,  day = hobo$day), FUN = 'mean')
+maxrecord <- max(hobo[hobo$station %in% 'Wexford_frigid_10',]$dyear)
+hobogood <- subset(hobo, dyear <= maxrecord)
+hobo.mean <- aggregate(list(t = hobogood$t), by = list(station = hobogood$station, month = hobogood$month,  day = hobogood$day), FUN = 'mean')
 hobo.mean2 <- aggregate(list(t = hobo.mean$t),by = list(station = hobo.mean$station), FUN = 'mean')
 
 hobo.summer <- subset(hobo, month %in% c(6,7,8))
@@ -395,8 +401,16 @@ AIC(model)
 hobo.d <- aggregate(list(t = hobo$t), by = list(station = hobo$station, year = hobo$year, month = hobo$month,  day = hobo$day, dyear = hobo$dyear), FUN = 'mean')
 hobo1 <- subset(hobo.d, station %in% 'Wexford_frigid_10', select = c(dyear, year, month, day, t, station))
 hobo2 <- subset(hobo.d, station %in% 'Wexford_frigid_50', select = c(dyear, year, month, day, t, station))
-hobo2$t.50 <- hobo2$t
-hobo1 <- merge(hobo1, hobo2[,c('dyear','t.50')], by='dyear', all.x = TRUE)
+hobo3 <- subset(hobo.d, station %in% 'Newaygo_frigid_10', select = c(dyear, year, month, day, t, station))
+hobo4 <- subset(hobo.d, station %in% 'Newaygo_frigid_50', select = c(dyear, year, month, day, t, station))
+hobo1$w.10 <- hobo1$t
+hobo2$w.50 <- hobo2$t
+hobo3$n.10 <- hobo3$t
+hobo4$n.50 <- hobo4$t
+hobo1 <- merge(hobo1, hobo2[,c('dyear','w.50')], by='dyear', all.x = TRUE, all.y = TRUE)
+hobo1 <- merge(hobo1, hobo3[,c('dyear','n.10')], by='dyear', all.x = TRUE, all.y = TRUE)
+hobo1 <- merge(hobo1, hobo4[,c('dyear','n.50')], by='dyear', all.x = TRUE, all.y = TRUE)
+
 sts <- unique(ground$STATION)
 i=1
 for (i in 1:length(sts)){
@@ -417,8 +431,10 @@ plot <-
   geom_line(aes(y=USC00208772, color ='USC00208772'), alpha=0.3)+
   geom_line(aes(y=USW00014817, color ='USW00014817'), alpha=0.3)+
   geom_line(aes(y=USC00201178, color ='USC00201178'), alpha=0.3)+
-  geom_line(aes(y=t, color ='Briar Hills, 10 cm'), alpha=1)+
-  geom_line(aes(y=t.50, color ='Briar Hills, 50 cm'), alpha=1)+
+  geom_line(aes(y=w.10, color ='Briar Hills, 10 cm'), alpha=1)+
+  geom_line(aes(y=w.50, color ='Briar Hills, 50 cm'), alpha=1)+
+  geom_line(aes(y=n.10, color ='Newaygo Highland, 10 cm'), alpha=1)+
+  geom_line(aes(y=n.50, color ='Newaygo Highland, 50 cm'), alpha=1)+
   scale_x_continuous(name= "Month", 
                      breaks=hobo1.month$dyear,
                      labels=hobo1.month$month,
@@ -427,11 +443,13 @@ plot <-
   theme(panel.grid.major = element_line(colour="white", size=1),
         panel.grid.minor = element_line(colour="white", size=0.1)) +
   scale_color_manual('Stations',
-                     breaks = c('USC00208774', 'USC00200779', 'USW00014817', 'USW00014817', 'USC00201178', 'Briar Hills, 10 cm', 'Briar Hills, 50 cm'),
-                     values = c('red', 'yellow', 'violet', 'blue', 'green', 'black', 'brown')
+                     breaks = c('USC00208774', 'USC00200779', 'USW00014817', 'USW00014817', 'USC00201178', 'Briar Hills, 10 cm', 'Briar Hills, 50 cm', 'Newaygo Highland, 10 cm', 'Newaygo Highland, 50 cm'),
+                     values = c('red', 'yellow', 'violet', 'blue', 'green', 'black', 'brown', 'darkgreen', 'tan')
   )+
   labs(title = "Air and soil temperatures", title.position = "bottom", color='Station')
-## correlation matrix
+plot
+
+## correlation matrix ----
 hobo2 <- subset(hobo1, month %in% c(7,8,9,10,4,5,6))
 hobo2 <- subset(hobo1)
 nums <- unlist(lapply(hobo2, is.numeric))
@@ -452,18 +470,17 @@ plot <-
   scale_y_continuous(name= "Temperature C", breaks=seq(-20, 35, 5), minor_breaks = seq(-20, 35, 1))+
   theme(panel.grid.major = element_line(colour="white", size=1),
         panel.grid.minor = element_line(colour="white", size=0.1)) +
-  scale_color_manual('Stations', breaks = c("Wexford_frigid_10", "Wexford_frigid_50", "Wexford_mesic_50", "Newaygo_frigid_50",  "Newaygo_mesic_50",
-                                            'BIG RAPIDS WATER TREATMENT PLANT, MI US' ,'WELLSTON TIPPY DAM, MI US', 'WELLSTON 1 N, MI US',
-                                            'CADILLAC, MI US', 'CADILLAC 9 AND 10 NEWS, MI US'),
-                     values = c('black', 'blue', 'cyan', 'red', 'orange', 'red','gray','gray','blue','gray' )
+  scale_color_manual('Stations', breaks = 
+  c("Wexford_frigid_10", "Wexford_frigid_50", "Wexford_mesic_50", "Newaygo_frigid_10","Newaygo_frigid_50",  "Newaygo_mesic_50",'BIG RAPIDS WATER TREATMENT PLANT, MI US' ,'WELLSTON TIPPY DAM, MI US', 'WELLSTON 1 N, MI US','CADILLAC, MI US', 'CADILLAC 9 AND 10 NEWS, MI US'),
+values = c('black', 'blue', 'cyan', 'darkgreen', 'red', 'orange', 'red','gray','gray','blue','gray' )
   )+
-  scale_linetype_manual('Stations', breaks = c("Wexford_frigid_10", "Wexford_frigid_50", "Wexford_mesic_50", "Newaygo_frigid_50",  "Newaygo_mesic_50",
-                                            'BIG RAPIDS WATER TREATMENT PLANT, MI US' ,'WELLSTON TIPPY DAM, MI US', 'WELLSTON 1 N, MI US',
-                                            'CADILLAC, MI US', 'CADILLAC 9 AND 10 NEWS, MI US'),
-                     values = c('solid', 'solid', 'solid', 'solid', 'solid', 'dashed','dashed','dashed','dashed','dashed' )
+  scale_linetype_manual('Stations', breaks = 
+  c("Wexford_frigid_10", "Wexford_frigid_50", "Wexford_mesic_50", "Newaygo_frigid_10","Newaygo_frigid_50",  "Newaygo_mesic_50",'BIG RAPIDS WATER TREATMENT PLANT, MI US' ,'WELLSTON TIPPY DAM, MI US', 'WELLSTON 1 N, MI US', 'CADILLAC, MI US', 'CADILLAC 9 AND 10 NEWS, MI US'),
+                        values =
+    c('solid', 'solid', 'solid', 'solid', 'solid','solid', 'dashed','dashed','dashed','dashed','dashed' )
   )+
   labs(title = "Air and soil temperatures", title.position = "bottom", color='Station')
-
+plot
 ### Ground station summaries ----
 ground.premean <- subset(ground, !is.na(t))
 ground.mean <- aggregate(list(t = ground.premean$t),  by = list(station = ground.premean$STATION, name = ground.premean$NAME, month = ground.premean$month), FUN = 'mean')
