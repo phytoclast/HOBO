@@ -1,0 +1,6 @@
+Historical soil temperature data (2009-2022): click here to download zipped .csv files
+https://www.weather.gov/ncrfc/LMI_SoilTemperatureDepthMaps
+https://www.weather.gov/source/ncrfc/Soil%20Temp/Soil_Temp_Archive.zip
+
+Enviro-weather
+https://mawn.geo.msu.edu/
