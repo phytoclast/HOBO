@@ -69,6 +69,8 @@ noaa.rec <- noaa.rec |> mutate(station=id, air=1, depth=0, t=(tmax+tmin)/20) |> 
 noaa.rec <- noaa.sta |> mutate(GRR1 = 0,GRR2 = 0,GRR5 = 0,GRR6 = 0) |> right_join(noaa.rec)
 
 alldata <- rbind(logdata, envirodata, noaa.rec) 
+                             
+
 
 #build models
 library(lubridate)
@@ -83,7 +85,25 @@ alldata <- alldata |> mutate(decdate = decimal_date(date),
                              sinsqr = (sin0+1)^2/2
                              # sin3mon = cos((doy-3/12)*2*3.141592+2.817934867) #3 month lag
 ) |> subset(decdate >= 1960)
-
+#use optimized stations as training for timeline
+# library(missRanger)
+# liststations <- c('USW00014840', 'USW00094849', 'USW00014817', 'USC00200779')
+# 
+# newdat.dates <- subset(alldata, select = c(date)) |> unique() |> arrange(date)
+# for(i in 1:length(liststations)){#i=1
+# newdat.station0 <- subset(noaa.train, station %in%  liststations[i],
+#                          select = c(date,t)) |> unique()
+# colnames(newdat.station0)[colnames(newdat.station0) == 't'] <- liststations[i]
+# newdat.dates <- left_join(newdat.dates, newdat.station0)}
+# newdat.dates <- newdat.dates |> mutate(decdate = decimal_date(date), 
+#           doy = (decdate - floor(decdate)),
+#           sin0 = cos((doy)*2*3.141592+2.817934867))
+# 
+# msrf <- missRanger(newdat.dates, USW00014840+USW00094849+USW00014817+USC00200779 ~ decdate+sin0+USW00014840+USW00094849+USW00014817+USC00200779)
+# msrf <- subset(msrf, select= -c(decdate,doy,sin0))
+# saveRDS(msrf, 'data/noaa/imputed.RDS')
+imputed <- readRDS('data/noaa/imputed.RDS')
+alldata <- left_join(alldata,imputed)
 # #test for optimal phase shift
 # sumt <- alldata |> subset(decdate > 1960 & decdate <2010 & station %in% "USW00094860") 
 # library(eegkit)
@@ -95,7 +115,8 @@ alldata <- alldata |> mutate(decdate = decimal_date(date),
 #   geom_line(aes(x=doy, y=sin0*15+10))+
 #   geom_line(aes(x=doy, y=(sin0+1)^2/2*10+5))
 
-mod <- lm(t ~ air*sin0+depth*sin0+
+mod <- lm(t ~ USW00014840+USW00094849+USW00014817+USC00200779+
+            air*sin0+depth*sin0+
             air*sin1mon+depth*sin1mon+
             air*sinsqr+depth*sinsqr+
             lat+lon+elev+decdate+I(decdate^2)+
@@ -105,10 +126,11 @@ mod <- lm(t ~ air*sin0+depth*sin0+
 summary(mod)
 alldata <- alldata |> mutate(pred = predict(mod,alldata), res = t-pred)
 library(ranger)
-rf <- ranger(res ~ air+depth+sin0+
-         sin1mon+sinsqr+
-         lat+lon+elev+decdate+
-         GRR1+GRR2+GRR5+GRR6, data=alldata, num.trees=200, sample.fraction = 0.25)
+rf <- ranger(res ~ USW00014840+USW00094849+USW00014817+USC00200779+
+               air+depth+sin0+
+               sin1mon+sinsqr+
+               lat+lon+elev+decdate+
+               GRR1+GRR2+GRR5+GRR6, data=alldata, num.trees=200, sample.fraction = 0.25)
 rf$prediction.error
 
 #test models
@@ -140,11 +162,16 @@ newdat <- newdat |> mutate(decdate = decimal_date(date),
                                        sin0 = cos((doy)*2*3.141592+2.817934867), #optimal phase
                                        sin1mon = cos((doy-1/12)*2*3.141592+2.817934867), #1 month lag
                                        sinsqr = (sin0+1)^2/2,
-                                      )
+                                      ) |> left_join(imputed)
 
 newdat <- newdat |> mutate(pred = predict(mod,newdat), pred2 = predictions(predict(rf, data=newdat)), pred3 = pred+pred2)
 
 newdat.monthly <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, mon, depth) |> summarise(t=mean(pred3))
+
+alldata.50 <- subset(alldata, depth >=50, select=c(station, lat, lon, elev)) |> unique()
+write.csv(alldata.50, 'alldata.50.csv', row.names = F)
+alldata.10 <- subset(alldata, depth ==10, select=c(station, lat, lon, elev)) |> unique()
+write.csv(alldata.10, 'alldata.10.csv', row.names = F)
 
 newdat.annual <- newdat |> subset(decdate >= 2010 & decdate < 2023) |> group_by(station, lat,lon,elev, depth) |> summarise(t=mean(pred3))
 write.csv(newdat.annual, 'annual_2010_2022.csv', row.names = F)
@@ -156,9 +183,45 @@ newdat.annual <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(
 write.csv(newdat.annual, 'annual_1961_1990.csv', row.names = F)
 
 library(ggplot2)
-
+original <- subset(alldata, station %in% c('GRR1', 'USW00014817','USW00094860') & depth %in% c(0,50) & decdate >= 1960)
+original <- subset(alldata, station %in% c('GRR2', 'USW00014817') & depth %in% c(0,50) & decdate >= 2010)
+original <- subset(alldata, station %in% c('GRR2', 'nwmhrs', 'elkrapids') & depth ==50 & decdate >= 2010)
+original <- subset(alldata, station %in% c('GRR6','aetna') & depth %in% c(50) & decdate >= 2015)
+original <- subset(alldata, station %in% c('aetna') & depth %in% c(0,10,50) & decdate >= 2015)
 original <- subset(alldata, station %in% c('GRR1', 'kalkaska') & depth ==10 & decdate >= 2015)
+original <- subset(alldata, station %in% c('GRR1','USW00014817') & depth %in% c(0,50) & decdate >= 2015)
+original <- subset(alldata, station %in% c('GRR1','arlene') & depth %in% c(10) & decdate >= 2015)
+
 modeled  <- subset(newdat, station %in% unique(original$station)  & depth %in% unique(original$depth) & decdate >= min(original$decdate) & decdate <= max(original$decdate) )
+
+dtg = 30
+annual = T
+
+if(annual){
+  original2 <- original |> mutate(y = floor(decdate), grp = floor(decdate*365.25/dtg), station.depth = paste(station, depth))
+  original2 <- original2 |> group_by(station.depth, y, mon) |> summarise(decdate = mean(decdate, na.rm=T), t=mean(t, na.rm=T))
+  original2 <- original2 |> group_by(station.depth, y) |> summarise(decdate = mean(decdate, na.rm=T), t=mean(t, na.rm=T))
+  modeled2 <- modeled |> mutate(y = floor(decdate), grp = floor(decdate*365.25/dtg), station.depth = paste(station, depth))
+  modeled2 <- modeled2 |> group_by(station.depth,  y, mon) |> summarise(decdate = mean(decdate, na.rm=T), pred3=mean(pred3, na.rm=T))
+  modeled2 <- modeled2 |> group_by(station.depth,  y) |> summarise(decdate = mean(decdate, na.rm=T), pred3=mean(pred3, na.rm=T))
+}else{
+  original2 <- original |> mutate(y = floor(decdate), grp = floor(decdate*365.25/dtg), station.depth = paste(station, depth))
+  original2 <- original2 |> group_by(station.depth, grp) |> summarise(decdate = mean(decdate, na.rm=T), t=mean(t, na.rm=T))
+  modeled2 <- modeled |> mutate(y = floor(decdate), grp = floor(decdate*365.25/dtg), station.depth = paste(station, depth))
+  modeled2 <- modeled2 |> group_by(station.depth, grp) |> summarise(decdate = mean(decdate, na.rm=T), pred3=mean(pred3, na.rm=T))
+}
+
+if(annual){
+  brks <- original |> mutate(y = floor(decdate)) |> group_by(y) |> summarise(brk = min(decdate))
+  brky <- original |> mutate(y = floor(decdate/10)*10) |> group_by(y) |> summarise(brk = min(decdate))
+}else{
+  brks <- original |> mutate(y = floor(decdate)) |> group_by(y,mon) |> summarise(brk = min(decdate))
+  brky <- original |> mutate(y = floor(decdate)) |> group_by(y) |> summarise(brk = min(decdate))
+}
+
 ggplot()+
-  geom_point(data=original, aes(x=decdate, y=t, color=station), alpha=0.2)+
-  geom_line(data=modeled, aes(x=decdate, y=pred3, color=station), alpha=1)
+  geom_point(data=original2, aes(x=decdate, y=t, color=station.depth), alpha=0.2)+
+  geom_line(data=modeled2, aes(x=decdate, y=pred3, color=station.depth), alpha=1)+
+  scale_x_continuous(name='date', breaks = brky$brk, labels = brky$y, minor_breaks = brks$brk)+
+  scale_y_continuous(name='temperature (C)')+
+  labs(title = paste(dtg, 'day average'))
