@@ -165,6 +165,8 @@ newdat <- newdat |> mutate(decdate = decimal_date(date),
                                       ) |> left_join(imputed)
 
 newdat <- newdat |> mutate(pred = predict(mod,newdat), pred2 = predictions(predict(rf, data=newdat)), pred3 = pred+pred2)
+saveRDS(newdat,'output/newdat.RDS')
+saveRDS(alldata,'output/alldata.RDS')
 
 newdat.monthly <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, mon, depth) |> summarise(t=mean(pred3))
 
@@ -183,6 +185,9 @@ newdat.annual <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(
 write.csv(newdat.annual, 'annual_1961_1990.csv', row.names = F)
 
 library(ggplot2)
+newdat <- readRDS('output/newdat.RDS')
+alldata <- readRDS('output/alldata.RDS')
+
 original <- subset(alldata, station %in% c('GRR1', 'USW00014817','USW00094860') & depth %in% c(0,50) & decdate >= 1960)
 original <- subset(alldata, station %in% c('GRR2', 'USW00014817') & depth %in% c(0,50) & decdate >= 2010)
 original <- subset(alldata, station %in% c('GRR2', 'nwmhrs', 'elkrapids') & depth ==50 & decdate >= 2010)
@@ -194,8 +199,8 @@ original <- subset(alldata, station %in% c('GRR1','arlene') & depth %in% c(10) &
 
 modeled  <- subset(newdat, station %in% unique(original$station)  & depth %in% unique(original$depth) & decdate >= min(original$decdate) & decdate <= max(original$decdate) )
 
-dtg = 30
-annual = T
+dtg = 7
+annual = F
 
 if(annual){
   original2 <- original |> mutate(y = floor(decdate), grp = floor(decdate*365.25/dtg), station.depth = paste(station, depth))
