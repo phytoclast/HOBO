@@ -3,16 +3,16 @@ library(dplyr)
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
 stations = ghcnd_stations()
-stations1 <- subset(stations, latitude >= 43 & latitude <= 45 & longitude >= -87 & longitude <= -84.5 & first_year <1970 & last_year > 2020 & element %in% 'TMAX')
+stations1 <- subset(stations, latitude >= 42 & latitude <= 45.7 & longitude >= -86.5 & longitude <= -83 & first_year <1970 & last_year > 2020 & element %in% 'TMAX')
 for(i in 1:length(stations1$id)){#i=1
 #data = ghcnd_search(stationid='USW00094860')
-data = ghcnd_search(stationid=stations1$id[i], refresh = TRUE)
+data = ghcnd_search(stationid=stations1$id[i], refresh = FALSE)
 dat.tmax <- data$tmax
 dat.tmin <- data$tmin
 dat.prcp <- data$prcp
 dat <- dat.prcp[,c('id', 'prcp', 'date')]  |> full_join(dat.tmax[,c('id', 'tmax', 'date')]) |> full_join(dat.tmin[,c('id', 'tmin', 'date')])
-
-dat1 <- rbind(dat1,dat)
+if(i == 1){dat1=dat}else{
+dat1 <- rbind(dat1,dat)}
 saveRDS(dat1,'NOAA_records.RDS')}
 stations1 <- subset(stations, id %in% unique(dat1$id) & element %in% 'TMAX')
 saveRDS(stations1,'NOAA_stations.RDS')

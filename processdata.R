@@ -155,3 +155,10 @@ write.csv(newdat.annual, 'annual_1981_2010.csv', row.names = F)
 newdat.annual <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, lat,lon,elev, depth) |> summarise(t=mean(pred3))
 write.csv(newdat.annual, 'annual_1961_1990.csv', row.names = F)
 
+library(ggplot2)
+
+original <- subset(alldata, station %in% c('GRR1', 'kalkaska') & depth ==10 & decdate >= 2015)
+modeled  <- subset(newdat, station %in% unique(original$station)  & depth %in% unique(original$depth) & decdate >= min(original$decdate) & decdate <= max(original$decdate) )
+ggplot()+
+  geom_point(data=original, aes(x=decdate, y=t, color=station), alpha=0.2)+
+  geom_line(data=modeled, aes(x=decdate, y=pred3, color=station), alpha=1)
