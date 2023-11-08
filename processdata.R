@@ -102,7 +102,8 @@ alldata <- alldata |> mutate(decdate = decimal_date(date),
 # msrf <- missRanger(newdat.dates, USW00014840+USW00094849+USW00014817+USC00200779 ~ decdate+sin0+USW00014840+USW00094849+USW00014817+USC00200779)
 # msrf <- subset(msrf, select= -c(decdate,doy,sin0))
 # saveRDS(msrf, 'data/noaa/imputed.RDS')
-imputed <- readRDS('data/noaa/imputed.RDS')
+imputed <- readRDS('data/noaa/normmodel.RDS') |> subset(select= c(date,t,pred))
+colnames(imputed) <- c('date','nt','ns') #normal temperature, normal soil
 alldata <- left_join(alldata,imputed)
 # #test for optimal phase shift
 # sumt <- alldata |> subset(decdate > 1960 & decdate <2010 & station %in% "USW00094860") 
@@ -115,20 +116,16 @@ alldata <- left_join(alldata,imputed)
 #   geom_line(aes(x=doy, y=sin0*15+10))+
 #   geom_line(aes(x=doy, y=(sin0+1)^2/2*10+5))
 
-mod <- lm(t ~ USW00014840+USW00094849+USW00014817+USC00200779+
+mod <- lm(t ~ air*nt+depth*ns+
             air*sin0+depth*sin0+
-            air*sin1mon+depth*sin1mon+
-            air*sinsqr+depth*sinsqr+
-            lat+lon+elev+decdate+I(decdate^2)+
             sin0*lat+sin0*lon+sin0*elev+
           GRR1+GRR2+GRR5+GRR6, data=alldata)
 
 summary(mod)
-alldata <- alldata |> mutate(pred = predict(mod,alldata), res = t-pred)
+alldata <- alldata |> mutate(pred = predict(mod,alldata), res = t-pred) |> subset(!is.na(nt))
 library(ranger)
-rf <- ranger(res ~ USW00014840+USW00094849+USW00014817+USC00200779+
+rf <- ranger(res ~ nt+ns+
                air+depth+sin0+
-               sin1mon+sinsqr+
                lat+lon+elev+decdate+
                GRR1+GRR2+GRR5+GRR6, data=alldata, num.trees=200, sample.fraction = 0.25)
 rf$prediction.error
@@ -184,6 +181,11 @@ write.csv(newdat.annual, 'annual_1981_2010.csv', row.names = F)
 newdat.annual <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, lat,lon,elev, depth) |> summarise(t=mean(pred3))
 write.csv(newdat.annual, 'annual_1961_1990.csv', row.names = F)
 
+
+###start over#### 
+library(dplyr)
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+
 library(ggplot2)
 newdat <- readRDS('output/newdat.RDS')
 alldata <- readRDS('output/alldata.RDS')
@@ -193,9 +195,10 @@ original <- subset(alldata, station %in% c('GRR2', 'USW00014817') & depth %in% c
 original <- subset(alldata, station %in% c('GRR2', 'nwmhrs', 'elkrapids') & depth ==50 & decdate >= 2010)
 original <- subset(alldata, station %in% c('GRR6','aetna') & depth %in% c(50) & decdate >= 2015)
 original <- subset(alldata, station %in% c('aetna') & depth %in% c(0,10,50) & decdate >= 2015)
+original <- subset(alldata, station %in% c('ncmc') & depth %in% c(0,10,50) & decdate >= 2015)
 original <- subset(alldata, station %in% c('GRR1', 'kalkaska') & depth ==10 & decdate >= 2015)
 original <- subset(alldata, station %in% c('GRR1','USW00014817') & depth %in% c(0,50) & decdate >= 2015)
-original <- subset(alldata, station %in% c('GRR1','arlene') & depth %in% c(10) & decdate >= 2015)
+original <- subset(alldata, station %in% c('GRR1','arlene') & depth %in% c(50) & decdate >= 2015)
 
 modeled  <- subset(newdat, station %in% unique(original$station)  & depth %in% unique(original$depth) & decdate >= min(original$decdate) & decdate <= max(original$decdate) )
 
@@ -230,3 +233,15 @@ ggplot()+
   scale_x_continuous(name='date', breaks = brky$brk, labels = brky$y, minor_breaks = brks$brk)+
   scale_y_continuous(name='temperature (C)')+
   labs(title = paste(dtg, 'day average'))
+
+#####mean year---
+modeled2 <- modeled |> mutate(d = floor((decdate-floor(decdate))*365.25), station.depth = paste(station, depth)) |> group_by(station.depth, d) |> summarise(pred3=mean(pred3))
+
+ggplot()+
+  geom_line(data=modeled2, aes(x=d, y=pred3, color=station.depth), alpha=1)+
+  scale_x_continuous(name='date', breaks = brky$brk, labels = brky$y, minor_breaks = brks$brk)+
+  scale_y_continuous(name='temperature (C)')+
+  labs(title = paste(dtg, 'day average'))
+
+
+
