@@ -82,7 +82,7 @@ alldata <- alldata |> mutate(decdate = decimal_date(date),
                              sin0 = cos((doy)*2*3.141592+2.817934867), #optimal phase
                              # sin15day = cos((doy+15/365)*2*3.141592+2.817934867), #15 day lag
                              sin1mon = cos((doy-1/12)*2*3.141592+2.817934867), #1 month lag
-                             sinsqr = (sin0+1)^2/2
+                             sinsqr = (sin0+1)^2/2, soil50 = ifelse(depth %in% 50,1,0)
                              # sin3mon = cos((doy-3/12)*2*3.141592+2.817934867) #3 month lag
 ) |> subset(decdate >= 1960)
 #use optimized stations as training for timeline
@@ -116,8 +116,8 @@ alldata <- left_join(alldata,imputed)
 #   geom_line(aes(x=doy, y=sin0*15+10))+
 #   geom_line(aes(x=doy, y=(sin0+1)^2/2*10+5))
 
-mod <- lm(t ~ air*nt+depth*ns+
-            air*sin0+depth*sin0+
+mod <- lm(t ~ air*nt+air*ns+soil50*nt+soil50*ns+
+            air*sin0+soil50*sin0+
             sin0*lat+sin0*lon+sin0*elev+
           GRR1+GRR2+GRR5+GRR6, data=alldata)
 
@@ -125,7 +125,7 @@ summary(mod)
 alldata <- alldata |> mutate(pred = predict(mod,alldata), res = t-pred) |> subset(!is.na(nt))
 library(ranger)
 rf <- ranger(res ~ nt+ns+
-               air+depth+sin0+
+               air+soil50+sin0+
                lat+lon+elev+decdate+
                GRR1+GRR2+GRR5+GRR6, data=alldata, num.trees=200, sample.fraction = 0.25)
 rf$prediction.error
@@ -158,7 +158,7 @@ newdat <- newdat |> mutate(decdate = decimal_date(date),
                                        d = day(date), 
                                        sin0 = cos((doy)*2*3.141592+2.817934867), #optimal phase
                                        sin1mon = cos((doy-1/12)*2*3.141592+2.817934867), #1 month lag
-                                       sinsqr = (sin0+1)^2/2,
+                                       sinsqr = (sin0+1)^2/2, soil50 = ifelse(depth %in% 50,1,0)
                                       ) |> left_join(imputed)
 
 newdat <- newdat |> mutate(pred = predict(mod,newdat), pred2 = predictions(predict(rf, data=newdat)), pred3 = pred+pred2)
