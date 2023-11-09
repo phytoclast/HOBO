@@ -1,4 +1,5 @@
 library(dplyr)
+library(lubridate)
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
 files <- list.files('data/loggers/clean')
@@ -123,21 +124,27 @@ mod <- lm(t ~ air*nt+air*ns+soil50*nt+soil50*ns+
 
 summary(mod)
 alldata <- alldata |> mutate(pred = predict(mod,alldata), res = t-pred) |> subset(!is.na(nt))
+mean((alldata$res)^2)^0.5
 library(ranger)
-rf <- ranger(res ~ nt+ns+
+# rf <- ranger(res ~ nt+ns+station+
+#                air+soil50+sin0+
+#                lat+lon+elev+decdate, data=alldata, num.trees=200, sample.fraction = 0.25)
+# rf$prediction.error
+# 
+# #test models
+# alldata <- alldata |> mutate(pred2 = predictions(predict(rf, data=alldata)), pred3 = pred+pred2)
+# 
+# mean((alldata$res - alldata$pred2)^2)^0.5
+# mean((alldata$t - alldata$pred3)^2)^0.5
+
+rf <- ranger(t ~ nt+ns+station+
                air+soil50+sin0+
-               lat+lon+elev+decdate+
-               GRR1+GRR2+GRR5+GRR6, data=alldata, num.trees=200, sample.fraction = 0.25)
+               lat+lon+elev+decdate
+               , data=alldata, num.trees=200, sample.fraction = 0.25)
 rf$prediction.error
-
+alldata <- alldata |> mutate(pred3 = predictions(predict(rf, data=alldata)))
+mean((alldata$t - alldata$pred3)^2)^0.5
 #test models
-alldata <- alldata |> mutate(pred2 = predictions(predict(rf, data=alldata)), pred3 = pred+pred2)
-
-newdat <- subset(alldata, station %in% 'USW00014817' & decdate >= 1961 & decdate < 1991) 
-newdat <- subset(alldata, station %in% c('GRR1','GRR2','GRR5','GRR6')) 
-newdat <- subset(alldata, station %in% 'nwmhrs' & decdate >= 2019.655 & decdate <= 2023.836) 
-
-newdat <- newdat |> group_by(station, mon, depth) |> summarize(t=mean(t), pred3=mean(pred3)) |> group_by(station, depth) |> summarize(t=mean(t), pred3=mean(pred3))
 
 
 
@@ -160,25 +167,24 @@ newdat <- newdat |> mutate(decdate = decimal_date(date),
                                        sin1mon = cos((doy-1/12)*2*3.141592+2.817934867), #1 month lag
                                        sinsqr = (sin0+1)^2/2, soil50 = ifelse(depth %in% 50,1,0)
                                       ) |> left_join(imputed)
-
-newdat <- newdat |> mutate(pred = predict(mod,newdat), pred2 = predictions(predict(rf, data=newdat)), pred3 = pred+pred2)
+newdat <- newdat |> mutate(t.lm = predict(mod,newdat), t.rf = predictions(predict(rf, data=newdat)))
+# newdat <- newdat |> mutate(pred = predict(mod,newdat), pred2 = predictions(predict(rf, data=newdat)), pred3 = pred+pred2)
 saveRDS(newdat,'output/newdat.RDS')
 saveRDS(alldata,'output/alldata.RDS')
 
-newdat.monthly <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, mon, depth) |> summarise(t=mean(pred3))
 
 alldata.50 <- subset(alldata, depth >=50, select=c(station, lat, lon, elev)) |> unique()
 write.csv(alldata.50, 'alldata.50.csv', row.names = F)
 alldata.10 <- subset(alldata, depth ==10, select=c(station, lat, lon, elev)) |> unique()
 write.csv(alldata.10, 'alldata.10.csv', row.names = F)
 
-newdat.annual <- newdat |> subset(decdate >= 2010 & decdate < 2023) |> group_by(station, lat,lon,elev, depth) |> summarise(t=mean(pred3))
+newdat.annual <- newdat |> subset(decdate >= 2010 & decdate < 2023) |> group_by(station, lat,lon,elev, depth) |> summarise(t.lm =mean(t.lm), t.rf =mean(t.rf))
 write.csv(newdat.annual, 'annual_2010_2022.csv', row.names = F)
 
-newdat.annual <- newdat |> subset(decdate >= 1981 & decdate < 2011) |> group_by(station, lat,lon,elev, depth) |> summarise(t=mean(pred3))
+newdat.annual <- newdat |> subset(decdate >= 1981 & decdate < 2011) |> group_by(station, lat,lon,elev, depth) |> summarise(t.lm =mean(t.lm), t.rf =mean(t.rf))
 write.csv(newdat.annual, 'annual_1981_2010.csv', row.names = F)
 
-newdat.annual <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, lat,lon,elev, depth) |> summarise(t=mean(pred3))
+newdat.annual <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, lat,lon,elev, depth) |> summarise(t.lm =mean(t.lm), t.rf =mean(t.rf))
 write.csv(newdat.annual, 'annual_1961_1990.csv', row.names = F)
 
 
@@ -191,7 +197,7 @@ newdat <- readRDS('output/newdat.RDS')
 alldata <- readRDS('output/alldata.RDS')
 
 original <- subset(alldata, station %in% c('GRR1', 'USW00014817','USW00094860') & depth %in% c(0,50) & decdate >= 1960)
-original <- subset(alldata, station %in% c('GRR2', 'USW00014817') & depth %in% c(0,50) & decdate >= 2010)
+original <- subset(alldata, station %in% c('GRR2', 'USW00014817') & depth %in% c(0,50) & decdate >= 2019)
 original <- subset(alldata, station %in% c('GRR2', 'nwmhrs', 'elkrapids') & depth ==50 & decdate >= 2010)
 original <- subset(alldata, station %in% c('GRR6','aetna') & depth %in% c(50) & decdate >= 2015)
 original <- subset(alldata, station %in% c('aetna') & depth %in% c(0,10,50) & decdate >= 2015)
@@ -210,13 +216,13 @@ if(annual){
   original2 <- original2 |> group_by(station.depth, y, mon) |> summarise(decdate = mean(decdate, na.rm=T), t=mean(t, na.rm=T))
   original2 <- original2 |> group_by(station.depth, y) |> summarise(decdate = mean(decdate, na.rm=T), t=mean(t, na.rm=T))
   modeled2 <- modeled |> mutate(y = floor(decdate), grp = floor(decdate*365.25/dtg), station.depth = paste(station, depth))
-  modeled2 <- modeled2 |> group_by(station.depth,  y, mon) |> summarise(decdate = mean(decdate, na.rm=T), pred3=mean(pred3, na.rm=T))
-  modeled2 <- modeled2 |> group_by(station.depth,  y) |> summarise(decdate = mean(decdate, na.rm=T), pred3=mean(pred3, na.rm=T))
+  modeled2 <- modeled2 |> group_by(station.depth,  y, mon) |> summarise(decdate = mean(decdate, na.rm=T), t=mean(t.rf, na.rm=T))
+  modeled2 <- modeled2 |> group_by(station.depth,  y) |> summarise(decdate = mean(decdate, na.rm=T), t=mean(t.rf, na.rm=T))
 }else{
   original2 <- original |> mutate(y = floor(decdate), grp = floor(decdate*365.25/dtg), station.depth = paste(station, depth))
   original2 <- original2 |> group_by(station.depth, grp) |> summarise(decdate = mean(decdate, na.rm=T), t=mean(t, na.rm=T))
   modeled2 <- modeled |> mutate(y = floor(decdate), grp = floor(decdate*365.25/dtg), station.depth = paste(station, depth))
-  modeled2 <- modeled2 |> group_by(station.depth, grp) |> summarise(decdate = mean(decdate, na.rm=T), pred3=mean(pred3, na.rm=T))
+  modeled2 <- modeled2 |> group_by(station.depth, grp) |> summarise(decdate = mean(decdate, na.rm=T), t=mean(t.rf, na.rm=T))
 }
 
 if(annual){
@@ -229,16 +235,16 @@ if(annual){
 
 ggplot()+
   geom_point(data=original2, aes(x=decdate, y=t, color=station.depth), alpha=0.2)+
-  geom_line(data=modeled2, aes(x=decdate, y=pred3, color=station.depth), alpha=1)+
+  geom_line(data=modeled2, aes(x=decdate, y=t, color=station.depth), alpha=1)+
   scale_x_continuous(name='date', breaks = brky$brk, labels = brky$y, minor_breaks = brks$brk)+
   scale_y_continuous(name='temperature (C)')+
   labs(title = paste(dtg, 'day average'))
 
 #####mean year---
-modeled2 <- modeled |> mutate(d = floor((decdate-floor(decdate))*365.25), station.depth = paste(station, depth)) |> group_by(station.depth, d) |> summarise(pred3=mean(pred3))
+modeled2 <- modeled |> mutate(d = floor((decdate-floor(decdate))*365.25), station.depth = paste(station, depth)) |> group_by(station.depth, d) |> summarise(t=mean(t.rf))
 
 ggplot()+
-  geom_line(data=modeled2, aes(x=d, y=pred3, color=station.depth), alpha=1)+
+  geom_line(data=modeled2, aes(x=d, y=t, color=station.depth), alpha=1)+
   scale_x_continuous(name='date', breaks = brky$brk, labels = brky$y, minor_breaks = brks$brk)+
   scale_y_continuous(name='temperature (C)')+
   labs(title = paste(dtg, 'day average'))
