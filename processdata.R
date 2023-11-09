@@ -123,27 +123,27 @@ mod <- lm(t ~ air*nt+air*ns+soil50*nt+soil50*ns+
           GRR1+GRR2+GRR5+GRR6, data=alldata)
 
 summary(mod)
-alldata <- alldata |> mutate(pred = predict(mod,alldata), res = t-pred) |> subset(!is.na(nt))
+alldata <- alldata |> mutate(t.lm = predict(mod,alldata), res = t-t.lm) |> subset(!is.na(nt))
 mean((alldata$res)^2)^0.5
 library(ranger)
-# rf <- ranger(res ~ nt+ns+station+
-#                air+soil50+sin0+
-#                lat+lon+elev+decdate, data=alldata, num.trees=200, sample.fraction = 0.25)
-# rf$prediction.error
-# 
-# #test models
-# alldata <- alldata |> mutate(pred2 = predictions(predict(rf, data=alldata)), pred3 = pred+pred2)
-# 
-# mean((alldata$res - alldata$pred2)^2)^0.5
-# mean((alldata$t - alldata$pred3)^2)^0.5
+rf.lm <- ranger(res ~ nt+ns+station+
+               air+soil50+sin0+
+               lat+lon+elev+decdate, data=alldata, num.trees=200, sample.fraction = 0.25)
+rf.lm$prediction.error
+
+#test models
+alldata <- alldata |> mutate(pred = predictions(predict(rf.lm, data=alldata)), t.rflm = pred+t.lm)
+
+mean((alldata$res - alldata$pred)^2)^0.5
+mean((alldata$t - alldata$t.rflm)^2)^0.5
 
 rf <- ranger(t ~ nt+ns+station+
                air+soil50+sin0+
                lat+lon+elev+decdate
                , data=alldata, num.trees=200, sample.fraction = 0.25)
 rf$prediction.error
-alldata <- alldata |> mutate(pred3 = predictions(predict(rf, data=alldata)))
-mean((alldata$t - alldata$pred3)^2)^0.5
+alldata <- alldata |> mutate(t.rf = predictions(predict(rf, data=alldata)))
+mean((alldata$t - alldata$t.rf)^2)^0.5
 #test models
 
 
@@ -167,7 +167,7 @@ newdat <- newdat |> mutate(decdate = decimal_date(date),
                                        sin1mon = cos((doy-1/12)*2*3.141592+2.817934867), #1 month lag
                                        sinsqr = (sin0+1)^2/2, soil50 = ifelse(depth %in% 50,1,0)
                                       ) |> left_join(imputed)
-newdat <- newdat |> mutate(t.lm = predict(mod,newdat), t.rf = predictions(predict(rf, data=newdat)))
+newdat <- newdat |> mutate(t.lm = predict(mod,newdat), t.rflm = predictions(predict(rf.lm, data=newdat))+t.lm, t.rf = predictions(predict(rf, data=newdat)))
 # newdat <- newdat |> mutate(pred = predict(mod,newdat), pred2 = predictions(predict(rf, data=newdat)), pred3 = pred+pred2)
 saveRDS(newdat,'output/newdat.RDS')
 saveRDS(alldata,'output/alldata.RDS')
@@ -178,13 +178,13 @@ write.csv(alldata.50, 'alldata.50.csv', row.names = F)
 alldata.10 <- subset(alldata, depth ==10, select=c(station, lat, lon, elev)) |> unique()
 write.csv(alldata.10, 'alldata.10.csv', row.names = F)
 
-newdat.annual <- newdat |> subset(decdate >= 2010 & decdate < 2023) |> group_by(station, lat,lon,elev, depth) |> summarise(t.lm =mean(t.lm), t.rf =mean(t.rf))
+newdat.annual <- newdat |> subset(decdate >= 2010 & decdate < 2023) |> group_by(station, lat,lon,elev, depth) |> summarise(t.lm =mean(t.lm), t.rf =mean(t.rf), t.rflm =mean(t.rflm))
 write.csv(newdat.annual, 'annual_2010_2022.csv', row.names = F)
 
-newdat.annual <- newdat |> subset(decdate >= 1981 & decdate < 2011) |> group_by(station, lat,lon,elev, depth) |> summarise(t.lm =mean(t.lm), t.rf =mean(t.rf))
+newdat.annual <- newdat |> subset(decdate >= 1981 & decdate < 2011) |> group_by(station, lat,lon,elev, depth) |> summarise(t.lm =mean(t.lm), t.rf =mean(t.rf), t.rflm =mean(t.rflm))
 write.csv(newdat.annual, 'annual_1981_2010.csv', row.names = F)
 
-newdat.annual <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, lat,lon,elev, depth) |> summarise(t.lm =mean(t.lm), t.rf =mean(t.rf))
+newdat.annual <- newdat |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, lat,lon,elev, depth) |> summarise(t.lm =mean(t.lm), t.rf =mean(t.rf), t.rflm =mean(t.rflm))
 write.csv(newdat.annual, 'annual_1961_1990.csv', row.names = F)
 
 
