@@ -75,6 +75,14 @@ noaa.rec <- noaa.rec |> mutate(station=id, air=1, depth=0, t=(tmax+tmin)/20) |> 
 
 noaa.rec <- noaa.sta |> mutate(GRR1 = 0,GRR2 = 0,GRR5 = 0,GRR6 = 0) |> right_join(noaa.rec)
 
+bigrapidscadillac <- nrow(subset(noaa.rec, station %in% c('USW00014817', 'USC00200779')))
+trecs <- (1/nrow(logdata)+1/nrow(envirodata)+1/nrow(noaa.rec)+1/bigrapidscadillac)
+logdata <-  mutate(logdata, wts = 1/nrow(logdata)/trecs)
+envirodata <-  mutate(envirodata, wts = 1/nrow(envirodata)/trecs)
+noaa.rec <-   mutate(noaa.rec, wts = ifelse(station %in% c('USW00014817', 'USC00200779'), 1/bigrapidscadillac/trecs,1/nrow(noaa.rec)/trecs))
+
+
+
 alldata <- rbind(logdata, envirodata, noaa.rec) 
                              
 
@@ -126,7 +134,7 @@ alldata <- left_join(alldata,imputed)
 mod <- lm(t ~ air*nt+air*ns+soil50*nt+soil50*ns+
             air*sin0+soil50*sin0+
             sin0*lat+sin0*lon+sin0*elev+
-            station, data=alldata)
+            station, data=alldata, weights = wts)
 
 summary(mod)
 alldata <- alldata |> mutate(t.lm = predict(mod,alldata), res = t-t.lm) |> subset(!is.na(nt))
@@ -134,7 +142,7 @@ mean((alldata$res)^2)^0.5
 library(ranger)
 rf.lm <- ranger(res ~ nt+ns+station+
                air+soil50+sin0+
-               lat+lon+elev+decdate, data=alldata, num.trees=200, sample.fraction = 0.25)
+               lat+lon+elev+decdate, data=alldata, num.trees=200, sample.fraction = 0.25, case.weights = 'wts')
 rf.lm$prediction.error
 
 #test models
@@ -146,7 +154,7 @@ mean((alldata$t - alldata$t.rflm)^2)^0.5
 rf <- ranger(t ~ nt+ns+station+
                air+soil50+sin0+
                lat+lon+elev+decdate
-               , data=alldata, num.trees=200, sample.fraction = 0.25)
+               , data=alldata, num.trees=200, sample.fraction = 0.25, case.weights = 'wts')
 rf$prediction.error
 alldata <- alldata |> mutate(t.rf = predictions(predict(rf, data=alldata)))
 mean((alldata$t - alldata$t.rf)^2)^0.5
