@@ -267,13 +267,30 @@ ggplot()+
 
 alldata <- mutate(alldata, station.depth = paste0(station,".",depth))
 
-alldata.GRR1 <- subset(alldata, station %in% 'GRR1' & depth %in% 50)
 alldata.elkrapids <- subset(alldata, station %in% 'elkrapids' & depth %in% 50)
 alldata.USW00014850 <- subset(alldata, station %in% 'USW00014850')#Traverse City
 alldata.USW00014817 <- subset(alldata, station %in% 'USW00014817')#Cadillac
 alldata.USC00200779 <- subset(alldata, station %in% 'USC00200779')#Big Rapids	
-alldata.GRR6 <- subset(alldata, station %in% 'GRR6' & depth %in% 50)
 alldata.aetna <- subset(alldata, station %in% 'aetna' & depth %in% 50)
+alldata.GRR1 <- subset(alldata, station %in% 'GRR1' & depth %in% 50)
+alldata.GRR2 <- subset(alldata, station %in% 'GRR2' & depth %in% 50)
+alldata.GRR5 <- subset(alldata, station %in% 'GRR5' & depth %in% 50)
+alldata.GRR6 <- subset(alldata, station %in% 'GRR6' & depth %in% 50)
+
+alldata.aetna.GRR5 <- subset(alldata, station %in% c('GRR5', 'aetna') & depth %in% 50 &
+                               date %in% alldata.GRR5$date & date %in% alldata.aetna$date) |> mutate(pair = "aetna X GRR5")
+
+alldata.bigrapids.GRR5 <- subset(alldata, station %in% c('GRR5', 'USC00200779') & depth %in% c(0,50) &
+                                   date %in% alldata.GRR5$date & date %in% alldata.USC00200779$date) |> mutate(pair = "bigrapids X GRR5")
+
+alldata.cadillac.GRR2 <- subset(alldata, station %in% c('GRR2', 'USW00014817') & depth %in% c(0,50) &
+                                  date %in% alldata.GRR2$date & date %in% alldata.USW00014817$date) |> mutate(pair = "cadillac X GRR2")
+
+alldata.bigrapids.GRR6 <- subset(alldata, station %in% c('GRR6', 'USC00200779') & depth %in% c(0,50) &
+                                   date %in% alldata.GRR6$date & date %in% alldata.USC00200779$date) |> mutate(pair = "bigrapids X GRR6")
+
+alldata.GRR1.cadillac <- subset(alldata, station %in% c('USW00014817', 'GRR1') & depth %in% c(0,50) &
+                                  date %in% alldata.USW00014817$date & date %in% alldata.GRR1$date) |> mutate(pair = "cadillac X GRR1")
 
 
 alldata.aetna.GRR6 <- subset(alldata, station %in% c('GRR6', 'aetna') & depth %in% 50 &
@@ -289,13 +306,13 @@ alldata.elkrapids.GRR1 <- subset(alldata, station %in% c('GRR1', 'elkrapids') & 
 alldata.elkrapids.traverse <- subset(alldata, station %in% c('USW00014850', 'elkrapids') & depth %in% 0 &
                                           date %in% alldata.USW00014850$date & date %in% alldata.elkrapids$date) |> mutate(pair = "elkrapids X traverse")
 
-alldata.GRR1.cadillac <- subset(alldata, station %in% c('USW00014817', 'GRR1') &
-                                          date %in% alldata.USW00014850$date & date %in% alldata.GRR1$date) |> mutate(pair = "GRR1 X cadillac")
 
 
 alldata.noaa.1990 <- subset(alldata, station %in% c('USW00014850','USW00014817','USC00200779') & decdate >= 1961 & decdate < 1991) |>  mutate(pair = "1961-1990")
 
-alldata.Cadillac <- rbind(alldata.aetna.bigrapids, alldata.aetna.GRR6, alldata.elkrapids.GRR1,alldata.elkrapids.traverse,alldata.GRR1.cadillac,alldata.noaa.1990)
+alldata.Cadillac <- rbind(alldata.bigrapids.GRR5, alldata.bigrapids.GRR6,
+                          alldata.GRR1.cadillac, alldata.cadillac.GRR2,
+                          alldata.aetna.bigrapids, alldata.aetna.GRR6, alldata.elkrapids.GRR1,alldata.elkrapids.traverse,alldata.GRR1.cadillac,alldata.noaa.1990)
 
 alldata.Cadillac <- alldata.Cadillac |> group_by(pair, station.depth, mon) |>  summarise(t=mean(t), t.rf = mean(t.rf), t.lm = mean(t.lm)) |> group_by(pair, station.depth)|>  summarise(t=mean(t), t.rf = mean(t.rf), t.lm = mean(t.lm)) 
 
