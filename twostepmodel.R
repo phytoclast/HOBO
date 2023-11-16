@@ -86,9 +86,20 @@ noaa.rec <-   mutate(noaa.rec, wts = ifelse(station %in% c('USW00014817', 'USC00
 alldata.50 <- rbind(logdata, envirodata)
 
 alldata.0 <- rbind(noaa.rec) 
+
+library(terra)
+library(sf)
+t0112 <- rast('data/PRISM/t0112.tif')
+p0112 <- rast('data/PRISM/p0112.tif')
+
 alldata <- rbind(alldata.50, alldata.0) 
-  
-  
+geo.tab <- alldata |> subset(select=c(station, lat,lon)) |> unique()
+geo <- st_as_sf(geo.tab, coords	= c(x='lon', y='lat'), crs='EPSG: 4326') |> st_transform(crs(t0112))
+
+geo.PRISM <- extract(c(t0112,p0112), vect(geo))  
+geo.PRISM <- cbind(geo.tab, geo.PRISM) |> subset(select=c(station, t0112, p0112))
+alldata.0 <- alldata.0 |> left_join(geo.PRISM)
+alldata.50 <- alldata.50 |> left_join(geo.PRISM)
 #build models
 library(lubridate)
 
@@ -110,13 +121,13 @@ colnames(imputed) <- c('date','nt','ns') #normal temperature, normal soil
 alldata.50 <- left_join(alldata.50,imputed) |> subset(!is.na(nt))
 
 
-summary(lm(t ~ nt+ns+forest+
-     air+soil50+sin0+
+summary(lm(t ~ nt+ns+forest+t0112+p0112+
+     air*nt+soil50*ns+sin0+
      lat+lon+elev+decdate
    , data=alldata.50))
 
 
-rf <- ranger(t ~ nt+ns+forest+
+rf <- ranger(t ~ nt+ns+forest+t0112+p0112+
                air+soil50+sin0+
                lat+lon+elev+decdate
              , data=alldata.50, num.trees=200, sample.fraction = 0.5)
@@ -148,7 +159,7 @@ newdat <- newdat |> mutate(station.depth = paste0(station,'.', depth,"cm",".",fo
                            sin0 = cos((doy)*2*3.141592+2.817934867), #optimal phase
                            sin1mon = cos((doy-1/12)*2*3.141592+2.817934867), #1 month lag
                            sinsqr = (sin0+1)^2/2, soil50 = ifelse(depth %in% 50,1,0)
-) |> left_join(imputed)
+) |> left_join(imputed) |> left_join(geo.PRISM)
 newdat.50 <- newdat |> mutate(t.rf = predictions(predict(rf, data=newdat)))
 
 #test 
@@ -201,7 +212,7 @@ imputed <- readRDS('data/noaa/normmodel.RDS') |> subset(select= c(date,t,pred))
 colnames(imputed) <- c('date','nt','ns') #normal temperature, normal soil
 alldata.0 <- left_join(alldata.0,imputed) |> subset(!is.na(nt))
 
-rf <- ranger(t ~ nt+ns+station+
+rf <- ranger(t ~ nt+ns+station+t0112+p0112+
                air+soil50+sin0+
                lat+lon+elev+decdate
              , data=alldata.0, num.trees=200, sample.fraction = 0.25)
@@ -229,7 +240,7 @@ newdat <- newdat |> mutate(station.depth = paste0(station,'.x', depth,"cm"),
                            sin0 = cos((doy)*2*3.141592+2.817934867), #optimal phase
                            sin1mon = cos((doy-1/12)*2*3.141592+2.817934867), #1 month lag
                            sinsqr = (sin0+1)^2/2, soil50 = ifelse(depth %in% 50,1,0)
-) |> left_join(imputed)
+) |> left_join(imputed)  |> left_join(geo.PRISM)
 newdat.0 <- newdat |> mutate(t.rf = predictions(predict(rf, data=newdat)))
 
 
@@ -238,81 +249,109 @@ newdat.50 <- newdat.50 |> mutate(t.best = ifelse(is.na(t),t.rf,t))
 newdat.0 <- newdat.0 |> mutate(t.best = ifelse(is.na(t),t.rf,t))
 
 
-newdat.50.20192022 <- newdat.50 |> subset(decdate >= 2019.485 & decdate < 2023.485) |> group_by(station, lat, lon, elev, depth, forest) |> summarise(t.rf = mean(t.rf), t.best = mean(t.best),t = mean(t, na.rm=T))|> as.data.frame()
+newdat.50.20192022 <- newdat.50 |> subset(decdate >= 2019.485 & decdate < 2023.485) |> group_by(station, lat, lon, elev, t0112, p0112, depth, forest) |> summarise(t.rf = mean(t.rf), t.best = mean(t.best),t = mean(t, na.rm=T))|> as.data.frame()
 
 newdat.20192022.air <- newdat.50.20192022 |> mutate(t.air = t.best) |> 
-  subset(depth %in% 0 & !forest %in% 'forest', select = c(station, lat, lon, elev, t.air))
+  subset(depth %in% 0 & !forest %in% 'forest', select = c(station, lat, lon, elev, t0112, p0112, t.air))
 newdat.20192022.open <- newdat.50.20192022|> mutate(t.open = t.best) |> 
-  subset(depth %in% 50 & !forest %in% 'forest', select = c(station, lat, lon, elev, t.open))
+  subset(depth %in% 50 & !forest %in% 'forest', select = c(station, lat, lon, elev, t0112, p0112, t.open))
 newdat.20192022.forest <- newdat.50.20192022 |> mutate(t.forest = t.best)|> 
-  subset(depth %in% 50 & forest %in% 'forest', select = c(station, lat, lon, elev, t.forest))
+  subset(depth %in% 50 & forest %in% 'forest', select = c(station, lat, lon, elev, t0112, p0112, t.forest))
 
 
 newdat.20192022 <- newdat.20192022.air |> left_join(newdat.20192022.open)|> left_join(newdat.20192022.forest) |> unique()
 
-newdat.20192022.GRR <- newdat.20192022 |> mutate(dt.open = t.open - t.air, dt.forest = t.forest - t.air, dt.forestopen = t.forest - t.open)
+newdat.20192022.GRR <- newdat.20192022 |> mutate(dtopen = t.open - t.air, dtforest = t.forest - t.air, dtforestopen = t.forest - t.open)
 
 newdat.20192022 <- subset(newdat.20192022.GRR)
 
 #predict temperature differential ----
-rf.forest <- ranger(dt.forest ~ 
-               lat+lon+elev
+rf.forest <- ranger(dtforest ~ #bring PRISM data in as covariate?
+               lat+lon+elev+t0112+p0112
              , data=newdat.20192022, num.trees=500, sample.fraction = 0.5)
 rf$prediction.error
-newdat.20192022 <- newdat.20192022 |> mutate(dt.forest.rf = predictions(predict(rf.forest, data=newdat.20192022)))
-mean((newdat.20192022$dt.forest - newdat.20192022$dt.forest.rf)^2)^0.5
+newdat.20192022 <- newdat.20192022 |> mutate(dtforestrf = predictions(predict(rf.forest, data=newdat.20192022)))
+mean((newdat.20192022$dtforest - newdat.20192022$dtforestrf)^2)^0.5
 
-rf.open <- ranger(dt.open ~ 
-               lat+lon+elev
+rf.open <- ranger(dtopen ~ 
+               lat+lon+elev+t0112+p0112
              , data=newdat.20192022, num.trees=500, sample.fraction = 0.5)
 rf$prediction.error
-newdat.20192022 <- newdat.20192022 |> mutate(dt.open.rf = predictions(predict(rf.open, data=newdat.20192022)))
-mean((newdat.20192022$dt.open - newdat.20192022$dt.open.rf)^2)^0.5
+newdat.20192022 <- newdat.20192022 |> mutate(dtopenrf = predictions(predict(rf.open, data=newdat.20192022)))
+mean((newdat.20192022$dtopen - newdat.20192022$dtopenrf)^2)^0.5
 
 #predict NOAA
 
-newdat.0.19611990 <- newdat.0 |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, lat, lon, elev) |> summarise(t1990 = mean(t.best)) |> subset(select = c(station, lat, lon, elev, t1990))
-newdat.0.19812010 <- newdat.0 |> subset(decdate >= 1981 & decdate < 2011) |> group_by(station, lat, lon, elev) |> summarise(t2010 = mean(t.best)) |> subset(select = c(station, lat, lon, elev, t2010))
+newdat.0.19611990 <- newdat.0 |> subset(decdate >= 1961 & decdate < 1991) |> group_by(station, lat, lon, elev, t0112, p0112) |> summarise(t1990 = mean(t.best)) |> subset(select = c(station, lat, lon, elev, t0112, p0112, t1990))
+newdat.0.19812010 <- newdat.0 |> subset(decdate >= 1981 & decdate < 2011) |> group_by(station, lat, lon, elev, t0112, p0112) |> summarise(t2010 = mean(t.best)) |> subset(select = c(station, lat, lon, elev, t0112, p0112, t2010))
 
 newdat.1990 <-  newdat.0.19611990 |> left_join(newdat.0.19812010) |> as.data.frame()
 
+summary(lm(t2010 ~ t0112+p0112+
+             lat+lon+elev
+           , data=newdat.1990))
+
+
 rf.1990 <- ranger(t1990 ~ 
-                    lat+lon+elev
-                  , data=newdat.1990, num.trees=500, sample.fraction = 0.5)
+                    lat+lon+elev+t0112+p0112
+                  , data=newdat.1990, num.trees=500, sample.fraction = 1)
 rf$prediction.error
-newdat.1990 <- newdat.1990 |> mutate(t1990.rf = predictions(predict(rf.1990, data=newdat.1990)))
-mean((newdat.1990$t1990 - newdat.1990$t1990.rf)^2)^0.5
+newdat.1990 <- newdat.1990 |> mutate(t1990rf = predictions(predict(rf.1990, data=newdat.1990)))
+mean((newdat.1990$t1990 - newdat.1990$t1990rf)^2)^0.5
 
 rf.2010 <- ranger(t2010 ~ 
-                    lat+lon+elev
-                  , data=newdat.1990, num.trees=500, sample.fraction = 0.5)
+                    lat+lon+elev+t0112+p0112
+                  , data=newdat.1990, num.trees=500, sample.fraction = 1)
 rf$prediction.error
-newdat.1990 <- newdat.1990 |> mutate(t2010.rf = predictions(predict(rf.2010, data=newdat.1990)))
-mean((newdat.1990$t2010 - newdat.1990$t2010.rf)^2)^0.5
+newdat.1990 <- newdat.1990 |> mutate(t2010rf = predictions(predict(rf.2010, data=newdat.1990)))
+mean((newdat.1990$t2010 - newdat.1990$t2010rf)^2)^0.5
 
 #apply to full data ----
 newdat.station <- subset(alldata.0, 
-                         select = c(station,lat,lon,elev)) |> unique() |> 
-  rbind(subset(alldata.50,select = c(station,lat,lon,elev)) |> unique())
+                         select = c(station,lat,lon,elev, t0112, p0112)) |> unique() |> 
+  rbind(subset(alldata.50,select = c(station,lat,lon,elev, t0112, p0112)) |> unique())
 
-newdat.station <- newdat.station |> mutate(t2010.rf = predictions(predict(rf.2010, data=newdat.station)),
-                                           t1990.rf = predictions(predict(rf.1990, data=newdat.station)),
-                                           dt.open.rf = predictions(predict(rf.open, data=newdat.station)),
-                                           dt.forest.rf = predictions(predict(rf.forest, data=newdat.station)))
+newdat.station <- newdat.station |> mutate(t2010rf = predictions(predict(rf.2010, data=newdat.station)),
+                                           t1990rf = predictions(predict(rf.1990, data=newdat.station)),
+                                           dtopenrf = predictions(predict(rf.open, data=newdat.station)),
+                                           dtforestrf = predictions(predict(rf.forest, data=newdat.station)))
 
 
 original <- newdat.1990 |> subset(select=c(station, t1990, t2010))
 newdat.station <- newdat.station |> left_join(original)
-original <- newdat.20192022 |> subset(select=c(station, dt.open, dt.forest))
+original <- newdat.20192022 |> subset(select=c(station, dtopen, dtforest))
 newdat.station <- newdat.station |> left_join(original)
 
 newdat.station <- newdat.station |> mutate(
-  soilopen1990 = ifelse(is.na(t1990), t1990.rf,t1990)+ifelse(is.na(dt.open), dt.open.rf,dt.open),
-  soilopen2010 = ifelse(is.na(t2010), t2010.rf,t2010)+ifelse(is.na(dt.open), dt.open.rf,dt.open),
-  soilforest1990 = ifelse(is.na(t1990), t1990.rf,t1990)+ifelse(is.na(dt.forest), dt.forest.rf,dt.forest),
-  soilforest2010 = ifelse(is.na(t2010), t2010.rf,t2010)+ifelse(is.na(dt.forest), dt.forest.rf,dt.forest))
-
-write.csv(newdat.station, 'soiltemperature.csv', row.names = F)
+  soilopen1990 = ifelse(is.na(t1990), t1990rf,t1990)+ifelse(is.na(dtopen), dtopenrf,dtopen),
+  soilopen2010 = ifelse(is.na(t2010), t2010rf,t2010)+ifelse(is.na(dtopen), dtopenrf,dtopen),
+  soilforest1990 = ifelse(is.na(t1990), t1990rf,t1990)+ifelse(is.na(dtforest), dtforestrf,dtforest),
+  soilforest2010 = ifelse(is.na(t2010), t2010rf,t2010)+ifelse(is.na(dtforest), dtforestrf,dtforest))
+newdat.station<- newdat.station |> mutate(t0112 = round(t0112,1),
+                                          p0112 = round(p0112,0),
+                                          t2010rf = round(t2010rf,1),
+                                          t1990rf = round(t1990rf,1),
+                                          dtopenrf = round(dtopenrf,2),
+                                          dtforestrf = round(dtforestrf,2),
+                                          t1990 = round(t1990,1),
+                                          t2010 = round(t2010,1),
+                                          dtopen = round(dtopen,2),
+                                          dtforest = round(dtforest,2),
+                                          soilopen1990 = round(soilopen1990,1),
+                                          soilopen2010 = round(soilopen2010,1),
+                                          soilforest2010 = round(soilforest2010,1),
+                                          soilforest1990 = round(soilforest1990,1))
+  
+newdat.station <- newdat.station |> mutate(group = ifelse(station %in% unique(alldata.0$station), 'NOAA', ifelse(grepl('GRR',station), 'GRR','MSU')))
+colnames(newdat.station) <- c("station","lat","lon","elev","t0112","p0112",
+                              "t2010rf","t1990rf","dtopenrf","dtforestrf","t1990","t2010",
+                              "dtopen","dtforest","soilopen1990","soilopen2010",
+                              "soilforest1990", "soilforest2010", "group")
+# colnames(newdat.station) <- c("station","lat","lon","elev","a","b",
+#                               "c","d","e","f","g","h",
+#                               "i","j","k","l",
+#                               "m", "n", "group")
+write.csv(newdat.station, 'test2soiltemperature.csv', row.names = F)
 
 
 
@@ -346,21 +385,21 @@ rf1990 <- ranger(dt1990 ~ lat+lon+elev
                  , data=newdat.0.annual, num.trees=500, sample.fraction = 0.25, case.weights = 'wts')
 rf1990$prediction.error
 
-newdat.0.annual <- newdat.0.annual |> mutate(dt1990.rf = predictions(predict(rf1990, data=newdat.0.annual)))
-mean((newdat.0.annual$dt1990 - newdat.0.annual$dt1990.rf)^2)^0.5
+newdat.0.annual <- newdat.0.annual |> mutate(dt1990rf = predictions(predict(rf1990, data=newdat.0.annual)))
+mean((newdat.0.annual$dt1990 - newdat.0.annual$dt1990rf)^2)^0.5
 
 rf2010 <- ranger(dt2010 ~ lat+lon+elev
              , data=newdat.0.annual, num.trees=500, sample.fraction = 0.25, case.weights = 'wts')
 rf2010$prediction.error
 
-newdat.0.annual <- newdat.0.annual |> mutate(dt2010.rf = predictions(predict(rf2010, data=newdat.0.annual)))
-mean((newdat.0.annual$dt1990 - newdat.0.annual$dt1990.rf)^2)^0.5
+newdat.0.annual <- newdat.0.annual |> mutate(dt2010rf = predictions(predict(rf2010, data=newdat.0.annual)))
+mean((newdat.0.annual$dt1990 - newdat.0.annual$dt1990rf)^2)^0.5
 
 write.csv(newdat.0.annual,'newdat.0.annual.csv', row.names = F)
 
-newdat.50.20192022 <- newdat.50.20192022 |> mutate(dt1990.rf = predictions(predict(rf1990, data=newdat.50.20192022)),
-                          dt2010.rf = predictions(predict(rf2010, data=newdat.50.20192022)),
-                          predt1990 = t.best+dt1990.rf, predt2010 = t.best+dt2010.rf)
+newdat.50.20192022 <- newdat.50.20192022 |> mutate(dt1990rf = predictions(predict(rf1990, data=newdat.50.20192022)),
+                          dt2010rf = predictions(predict(rf2010, data=newdat.50.20192022)),
+                          predt1990 = t.best+dt1990rf, predt2010 = t.best+dt2010rf)
 write.csv(newdat.50.20192022,'newdat.50.20192022.csv', row.names = F)
 newdat.20192022.50 <- subset(newdat.50.20192022, depth %in% 50)
 write.csv(newdat.20192022.50,'newdat.20192022.50.csv', row.names = F)
